@@ -909,7 +909,7 @@
                  exported="false" />
         <library path="${basedir}/build/plugins/parse-html/tagsoup-1.2.1.jar" 
                  exported="false" />
-        <library path="${basedir}/build/plugins/indexer-solr/solr-solrj-3.4.0.jar" 
+        <library path="${basedir}/build/plugins/indexer-solr/solr-solrj-4.4.0.jar" 
                  exported="false" />
 
         <source path="${basedir}/src/java/" />

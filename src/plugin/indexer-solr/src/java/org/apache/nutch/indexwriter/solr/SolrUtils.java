@@ -16,23 +16,36 @@
  */
 package org.apache.nutch.indexwriter.solr;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.UsernamePasswordCredentials;
-import org.apache.commons.httpclient.params.HttpClientParams;
+import java.io.IOException;
+import java.net.MalformedURLException;
+
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpRequestInterceptor;
+import org.apache.http.auth.AuthScheme;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.AuthState;
+import org.apache.http.auth.Credentials;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.protocol.ClientContext;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.ExecutionContext;
+import org.apache.http.protocol.HttpContext;
+import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.solr.client.solrj.impl.CommonsHttpSolrServer;
-
-import java.net.MalformedURLException;
 
 public class SolrUtils {
 
   public static Logger LOG = LoggerFactory.getLogger(SolrUtils.class);
 
-  public static CommonsHttpSolrServer getCommonsHttpSolrServer(JobConf job) throws MalformedURLException {
-    HttpClient client=new HttpClient();
+  public static HttpSolrServer getHttpSolrServer(JobConf job) throws MalformedURLException {
+    DefaultHttpClient client = new DefaultHttpClient();
 
     // Check for username/password
     if (job.getBoolean(SolrConstants.USE_AUTH, false)) {
@@ -42,17 +55,18 @@ public class SolrUtils {
 
       AuthScope scope = new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT, AuthScope.ANY_REALM, AuthScope.ANY_SCHEME);
 
-      client.getState().setCredentials(scope, new UsernamePasswordCredentials(username, job.get(SolrConstants.PASSWORD)));
+      client.getCredentialsProvider().setCredentials(scope, new UsernamePasswordCredentials(username, job.get(SolrConstants.PASSWORD)));
 
-      HttpClientParams params = client.getParams();
-      params.setAuthenticationPreemptive(true);
+      BasicHttpContext context = new BasicHttpContext();
+      BasicScheme basicAuth = new BasicScheme();
+      context.setAttribute("preemptive-auth", basicAuth);
 
-      client.setParams(params);
+      client.addRequestInterceptor(new PreemptiveAuth(), 0);
     }
 
     String serverURL = job.get(SolrConstants.SERVER_URL);
-    
-    return new CommonsHttpSolrServer(serverURL, client);
+
+    return new HttpSolrServer(serverURL, client);
   }
 
   public static String stripNonCharCodepoints(String input) {
@@ -74,5 +88,35 @@ public class SolrUtils {
     }
 
     return retval.toString();
+  }
+
+  static class PreemptiveAuth implements HttpRequestInterceptor {
+
+    public void process(
+        final HttpRequest request,
+        final HttpContext context) throws HttpException, IOException {
+      AuthState authState = (AuthState) context.getAttribute(
+          ClientContext.TARGET_AUTH_STATE);
+      // If no auth scheme avaialble yet, try to initialize it preemptively
+      if (authState.getAuthScheme() == null) {
+        AuthScheme authScheme = (AuthScheme) context.getAttribute(
+            "preemptive-auth");
+        CredentialsProvider credsProvider = (CredentialsProvider) context.getAttribute(
+            ClientContext.CREDS_PROVIDER);
+        HttpHost targetHost = (HttpHost) context.getAttribute(
+            ExecutionContext.HTTP_TARGET_HOST);
+        if (authScheme != null) {
+          Credentials creds = credsProvider.getCredentials(
+              new AuthScope(
+                  targetHost.getHostName(),
+                  targetHost.getPort()));
+          if (creds == null) {
+            throw new HttpException("No credentials for preemptive authentication");
+          }
+          authState.setAuthScheme(authScheme);
+          authState.setCredentials(creds);
+        }
+      }
+    }
   }
 }

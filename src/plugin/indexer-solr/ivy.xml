@@ -36,7 +36,7 @@
   </publications>
 
   <dependencies>
-   <dependency org="org.apache.solr" name="solr-solrj" rev="3.4.0"
+   <dependency org="org.apache.solr" name="solr-solrj" rev="4.4.0"
 		conf="*->default"/>
   </dependencies>
   

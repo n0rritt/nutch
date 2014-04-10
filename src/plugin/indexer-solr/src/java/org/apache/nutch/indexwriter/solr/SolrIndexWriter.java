@@ -55,7 +55,7 @@ public class SolrIndexWriter implements IndexWriter {
     private boolean delete = false;
 
     public void open(JobConf job, String name) throws IOException {
-        SolrServer server = SolrUtils.getCommonsHttpSolrServer(job);
+        SolrServer server = SolrUtils.getHttpSolrServer(job);
         init(server, job);
     }
 
